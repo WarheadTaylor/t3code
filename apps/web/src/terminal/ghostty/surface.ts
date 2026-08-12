@@ -45,6 +45,15 @@ const TERMINAL_FONT_LOAD_VARIANTS = [
   "italic 700",
 ] as const;
 
+interface TerminalInputStyleSnapshot {
+  readonly left: string;
+  readonly top: string;
+  readonly width: string;
+  readonly height: string;
+  readonly zIndex: string;
+  readonly pointerEvents: string;
+}
+
 /** Requested terminal font; omitted fields fall back to the defaults. */
 export interface GhosttyTerminalFont {
   readonly family?: string;
@@ -540,7 +549,7 @@ export class GhosttyTerminalSurface {
   private readonly reducedMotionMedia = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   private inputLeft = -1;
   private inputTop = -1;
-  private contextMenuInputPositioned = false;
+  private contextMenuInputStyle: TerminalInputStyleSnapshot | null = null;
 
   private constructor(
     mount: HTMLElement,
@@ -1321,12 +1330,18 @@ export class GhosttyTerminalSurface {
     // Native browser and Electron menus enable Paste for the focused editable
     // element. Put the hidden input under the pointer before the menu opens so
     // the terminal gets the platform's normal context-menu Paste action.
+    this.restoreInputAfterContextMenu();
+    this.contextMenuInputStyle = {
+      left: this.input.style.left,
+      top: this.input.style.top,
+      width: this.input.style.width,
+      height: this.input.style.height,
+      zIndex: this.input.style.zIndex,
+      pointerEvents: this.input.style.pointerEvents,
+    };
     const bounds = this.mount.getBoundingClientRect();
     const left = event.clientX - bounds.left - CONTEXT_MENU_INPUT_SIZE / 2;
     const top = event.clientY - bounds.top - CONTEXT_MENU_INPUT_SIZE / 2;
-    this.contextMenuInputPositioned = true;
-    this.inputLeft = left;
-    this.inputTop = top;
     this.input.style.left = `${left}px`;
     this.input.style.top = `${top}px`;
     this.input.style.width = `${CONTEXT_MENU_INPUT_SIZE}px`;
@@ -1595,7 +1610,7 @@ export class GhosttyTerminalSurface {
   }
 
   private positionInput(): void {
-    if (this.contextMenuInputPositioned) return;
+    if (this.contextMenuInputStyle !== null) return;
     const snapshot = this.snapshot;
     if (!snapshot || !snapshot.cursorVisible || snapshot.cursorX < 0 || snapshot.cursorY < 0) {
       return;
@@ -1613,15 +1628,15 @@ export class GhosttyTerminalSurface {
   }
 
   private restoreInputAfterContextMenu(): void {
-    if (!this.contextMenuInputPositioned) return;
-    this.contextMenuInputPositioned = false;
-    this.inputLeft = -1;
-    this.inputTop = -1;
-    this.input.style.width = "1px";
-    this.input.style.height = "1px";
-    this.input.style.zIndex = "";
-    this.input.style.pointerEvents = "none";
-    this.positionInput();
+    const style = this.contextMenuInputStyle;
+    if (style === null) return;
+    this.contextMenuInputStyle = null;
+    this.input.style.left = style.left;
+    this.input.style.top = style.top;
+    this.input.style.width = style.width;
+    this.input.style.height = style.height;
+    this.input.style.zIndex = style.zIndex;
+    this.input.style.pointerEvents = style.pointerEvents;
   }
 
   private cellAt(clientX: number, clientY: number): { x: number; y: number } {
